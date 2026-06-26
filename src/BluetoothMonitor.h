@@ -19,6 +19,9 @@ public:
 
     bool checkAlreadyConnectedDevices();
 
+    // Async page of a known device by MAC (org.bluez.Device1.Connect).
+    void connectDevice(const QString &macAddress);
+
 signals:
     void deviceConnected(const QString &macAddress, const QString &deviceName);
     void deviceDisconnected(const QString &macAddress, const QString &deviceName);
@@ -31,6 +34,7 @@ private:
     void registerDBusService();
     bool isAirPodsDevice(const QString &devicePath);
     QString getDeviceName(const QString &devicePath);
+    bool fetchManagedObjects(ManagedObjectList &out);
 };
 
 #endif // BLUETOOTHMONITOR_H

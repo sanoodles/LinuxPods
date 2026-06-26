@@ -41,6 +41,8 @@ if(LINUXPODS_BUILD_GUI)
         logger.h
         service/linuxpodsservice.cpp
         service/linuxpodsservice.h
+        service/autoconnectpolicy.cpp
+        service/autoconnectpolicy.h
         dbus/linuxpodsdbusadaptor.h
         media/mediacontroller.cpp
         media/mediacontroller.h
@@ -151,6 +153,8 @@ set(DAEMON_SOURCES
     daemon/main.cpp
     service/linuxpodsservice.cpp
     service/linuxpodsservice.h
+    service/autoconnectpolicy.cpp
+    service/autoconnectpolicy.h
     dbus/linuxpodsdbusadaptor.h
     media/mediacontroller.cpp
     media/mediacontroller.h
@@ -189,6 +193,55 @@ set_target_properties(linuxpods-daemon PROPERTIES
 install(TARGETS linuxpods-daemon
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+# ── Unit tests (opt-in: -DLINUXPODS_BUILD_TESTS=ON) ───────────────────
+option(LINUXPODS_BUILD_TESTS "Build unit tests" OFF)
+if(LINUXPODS_BUILD_TESTS)
+    enable_testing()
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+
+    qt_add_executable(test_autoconnectpolicy
+        tests/test_autoconnectpolicy.cpp
+        service/autoconnectpolicy.cpp
+        service/autoconnectpolicy.h
+    )
+    target_include_directories(test_autoconnectpolicy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(test_autoconnectpolicy PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(test_autoconnectpolicy PROPERTIES
+        INSTALL_RPATH "" BUILD_WITH_INSTALL_RPATH OFF SKIP_BUILD_RPATH ON)
+    add_test(NAME autoconnectpolicy COMMAND test_autoconnectpolicy)
+
+    # BLE field interpretation (isWorn / isBusyElsewhere) — header-only.
+    qt_add_executable(test_bleinfo tests/test_bleinfo.cpp)
+    target_include_directories(test_bleinfo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(test_bleinfo PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(test_bleinfo PROPERTIES
+        INSTALL_RPATH "" BUILD_WITH_INSTALL_RPATH OFF SKIP_BUILD_RPATH ON)
+    add_test(NAME bleinfo COMMAND test_bleinfo)
+
+    # ── Tier 2: connectDevice() integration test (mock BlueZ) ────────────
+    # Harness binary calls BluetoothMonitor::connectDevice(); the Python test
+    # drives it against python-dbusmock. The test self-skips (exit 0) when
+    # python3-dbusmock isn't installed, so it's safe in the default run.
+    qt_add_executable(connectdevice_harness
+        tests/connectdevice_harness.cpp
+        BluetoothMonitor.cpp
+        BluetoothMonitor.h
+    )
+    target_include_directories(connectdevice_harness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(connectdevice_harness PRIVATE Qt6::Core Qt6::DBus)
+    set_target_properties(connectdevice_harness PROPERTIES
+        INSTALL_RPATH "" BUILD_WITH_INSTALL_RPATH OFF SKIP_BUILD_RPATH ON)
+
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME connectdevice_dbusmock
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_connectdevice_dbusmock.py)
+        set_tests_properties(connectdevice_dbusmock PROPERTIES
+            ENVIRONMENT "CONNECTDEVICE_HARNESS=$<TARGET_FILE:connectdevice_harness>")
+    endif()
+endif()
 
 # ── Locate side data and plasmoid trees ──────────────────────────────
 # When building locally with `cmake -S src -B build`, they are at ../data.

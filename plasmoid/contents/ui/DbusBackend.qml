@@ -43,6 +43,7 @@ Item {
     readonly property bool autoStart: _get("AutoStartEnabled", false)
     readonly property int retries: _get("RetryAttempts", 3)
     readonly property bool crossDevice: _get("CrossDeviceEnabled", false)
+    readonly property int autoConnect: _get("AutoConnectBehavior", 1)
 
     // ── Convenience ─────────────────────────────────────────────────
     readonly property bool available: _ok
@@ -66,6 +67,7 @@ Item {
     function setAutoSt(b)   { _call("SetAutoStartEnabled", b); }
     function setRetry(n)    { _call("SetRetryAttempts", n); }
     function setCross(b)    { _call("SetCrossDeviceEnabled", b); }
+    function setAutoConn(i) { _call("SetAutoConnectBehavior", i); }
 
     // ═══════════════════════════════════════════════════════════════
     property var _d: ({})

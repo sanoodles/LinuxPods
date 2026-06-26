@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "service/linuxpodsservice.h"
+#include "service/autoconnectpolicy.h"
 
 #include <QLoggingCategory>
 #include <QProcessEnvironment>
 
 Q_DECLARE_LOGGING_CATEGORY(linuxpods)
+
+// Policy enum must match the Q_ENUM exposed over D-Bus/QML.
+static_assert(int(AutoConnect::Behavior::Off) == LinuxPodsService::Off);
+static_assert(int(AutoConnect::Behavior::WhenWorn) == LinuxPodsService::WhenWorn);
+static_assert(int(AutoConnect::Behavior::WhenWornAndPlaying) == LinuxPodsService::WhenWornAndPlaying);
 
 LinuxPodsService::LinuxPodsService(bool debugMode, QObject *parent)
     : QObject(parent)
@@ -19,6 +25,8 @@ LinuxPodsService::LinuxPodsService(bool debugMode, QObject *parent)
     QLoggingCategory::setFilterRules(
         QString("linuxpods.debug=%1").arg(debugMode ? "true" : "false"));
     LOG_INFO("LinuxPodsService: initializing");
+
+    m_monotonic.start();   // engine cooldown clock
 
     // Media controller
     m_mediaController = new MediaController(this);
@@ -62,6 +70,7 @@ LinuxPodsService::LinuxPodsService(bool debugMode, QObject *parent)
     setEarDetectionBehavior(loadEarDetectionSettings());
     setRetryAttempts(loadRetryAttempts());
     m_notificationsEnabled = loadNotificationsEnabled();
+    setAutoConnectBehavior(loadAutoConnectBehavior());
 
     LOG_INFO("LinuxPodsService: initialized");
 }
@@ -234,6 +243,17 @@ void LinuxPodsService::setRetryAttempts(int attempts)
     }
 }
 
+void LinuxPodsService::setAutoConnectBehavior(int behavior)
+{
+    if (m_autoConnectBehavior == behavior)
+    {
+        return;
+    }
+    m_autoConnectBehavior = behavior;
+    saveAutoConnectBehavior();
+    emit autoConnectBehaviorChanged(behavior);
+}
+
 void LinuxPodsService::renameDevice(const QString &newName)
 {
     if (newName.isEmpty())
@@ -357,6 +377,39 @@ void LinuxPodsService::onBleDeviceFound(const BleInfo &device)
             isModelHeadset(m_deviceInfo->model()));
         m_deviceInfo->getEarDetection()->overrideEarDetectionStatus(
             device.isPrimaryInEar, device.isSecondaryInEar);
+
+        maybeAutoConnect(device);
+    }
+}
+
+void LinuxPodsService::maybeAutoConnect(const BleInfo &device)
+{
+    AutoConnect::Observation obs;
+    obs.behavior     = static_cast<AutoConnect::Behavior>(m_autoConnectBehavior);
+    obs.inEar        = ble::isWorn(device);
+    obs.isConnected  = isConnected();
+    obs.phoneBusy    = ble::isBusyElsewhere(device);
+    obs.localPlaying = m_mediaController->getCurrentMediaState() == MediaController::Playing;
+    obs.hasAddress   = !m_deviceInfo->bluetoothAddress().isEmpty();
+
+    switch (m_autoConnect.step(obs, m_monotonic.elapsed()))
+    {
+    case AutoConnect::Decision::Connect:
+        LOG_INFO("[auto-connect] AirPods put on -> connecting "
+                 << m_deviceInfo->bluetoothAddress());
+        m_monitor->connectDevice(m_deviceInfo->bluetoothAddress());
+        break;
+    case AutoConnect::Decision::SkipBusyElsewhere:
+        LOG_INFO("[auto-connect] Worn but busy on another device; not grabbing");
+        break;
+    case AutoConnect::Decision::SkipNotPlaying:
+        LOG_DEBUG("[auto-connect] Worn but nothing playing locally; waiting");
+        break;
+    case AutoConnect::Decision::SkipNoAddress:
+        LOG_WARN("[auto-connect] No known classic address for AirPods yet");
+        break;
+    default:
+        break;   // other skips: stay quiet
     }
 }
 
@@ -678,6 +731,7 @@ void LinuxPodsService::handleDeviceDisconnected(const QBluetoothAddress &address
     }
 
     m_deviceInfo->reset();
+    m_autoConnect.onDisconnected();
     m_bleManager->startScan();
     emit connectionChanged();
     emit deviceDisconnected();
@@ -856,4 +910,15 @@ int LinuxPodsService::loadRetryAttempts() const
 void LinuxPodsService::saveRetryAttempts(int attempts)
 {
     m_settings->setValue("bluetooth/retryAttempts", attempts);
+}
+
+int LinuxPodsService::loadAutoConnectBehavior() const
+{
+    return m_settings->value("bluetooth/autoConnect",
+                             AutoConnectBehavior::WhenWorn).toInt();
+}
+
+void LinuxPodsService::saveAutoConnectBehavior() const
+{
+    m_settings->setValue("bluetooth/autoConnect", m_autoConnectBehavior);
 }

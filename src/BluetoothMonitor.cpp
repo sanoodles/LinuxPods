@@ -65,21 +65,24 @@ QString BluetoothMonitor::getDeviceName(const QString &devicePath)
     return "Unknown";
 }
 
-bool BluetoothMonitor::checkAlreadyConnectedDevices()
+bool BluetoothMonitor::fetchManagedObjects(ManagedObjectList &out)
 {
     QDBusInterface objectManager("org.bluez", "/", "org.freedesktop.DBus.ObjectManager", m_dbus);
     QDBusMessage reply = objectManager.call("GetManagedObjects");
-
     if (reply.type() == QDBusMessage::ErrorMessage)
     {
         LOG_WARN("Failed to get managed objects: " << reply.errorMessage());
         return false;
     }
+    reply.arguments().constFirst().value<QDBusArgument>() >> out;
+    return true;
+}
 
-    QVariant firstArg = reply.arguments().constFirst();
-    QDBusArgument arg = firstArg.value<QDBusArgument>();
+bool BluetoothMonitor::checkAlreadyConnectedDevices()
+{
     ManagedObjectList managedObjects;
-    arg >> managedObjects;
+    if (!fetchManagedObjects(managedObjects))
+        return false;
 
     bool deviceFound = false;
 
@@ -117,6 +120,43 @@ bool BluetoothMonitor::checkAlreadyConnectedDevices()
         }
     }
     return deviceFound;
+}
+
+void BluetoothMonitor::connectDevice(const QString &macAddress)
+{
+    ManagedObjectList managedObjects;
+    if (!fetchManagedObjects(managedObjects))
+        return;
+
+    for (auto it = managedObjects.constBegin(); it != managedObjects.constEnd(); ++it)
+    {
+        const QMap<QString, QVariantMap> &interfaces = it.value();
+        if (!interfaces.contains("org.bluez.Device1"))
+            continue;
+
+        const QVariantMap &props = interfaces.value("org.bluez.Device1");
+        if (props.value("Address").toString().compare(macAddress, Qt::CaseInsensitive) != 0)
+            continue;
+
+        const QString path = it.key().path();
+        QDBusInterface device("org.bluez", path, "org.bluez.Device1", m_dbus);
+        QDBusPendingCall pending = device.asyncCall("Connect");
+
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [path](QDBusPendingCallWatcher *w) {
+            QDBusPendingReply<> r = *w;
+            if (r.isError())
+                LOG_WARN("[connect] Connect() failed for " << path << ": "
+                         << r.error().message());
+            else
+                LOG_INFO("[connect] Connect() succeeded for " << path);
+            w->deleteLater();
+        });
+        return;
+    }
+
+    LOG_WARN("[connect] Device " << macAddress << " not found in BlueZ");
 }
 
 void BluetoothMonitor::onPropertiesChanged(const QString &interface, const QVariantMap &changedProps, const QStringList &invalidatedProps)

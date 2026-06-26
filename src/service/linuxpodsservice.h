@@ -8,6 +8,7 @@
 #include <QBluetoothDeviceInfo>
 #include <QBluetoothLocalDevice>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QProcess>
 #include <QRegularExpression>
 
@@ -23,6 +24,7 @@
 #include "ble/blemanager.h"
 #include "ble/bleutils.h"
 #include "media/mediacontroller.h"
+#include "service/autoconnectpolicy.h"
 
 using namespace AirpodsTrayApp::Enums;
 
@@ -50,8 +52,14 @@ class LinuxPodsService : public QObject
                WRITE setNotificationsEnabled NOTIFY notificationsEnabledChanged)
     Q_PROPERTY(int retryAttempts READ retryAttempts
                WRITE setRetryAttempts NOTIFY retryAttemptsChanged)
+    Q_PROPERTY(int autoConnectBehavior READ autoConnectBehavior
+               WRITE setAutoConnectBehavior NOTIFY autoConnectBehaviorChanged)
 
 public:
+    // Auto-connect policy (see AutoConnect::Behavior).
+    enum AutoConnectBehavior { Off = 0, WhenWorn = 1, WhenWornAndPlaying = 2 };
+    Q_ENUM(AutoConnectBehavior)
+
     explicit LinuxPodsService(bool debugMode, QObject *parent = nullptr);
     ~LinuxPodsService() override;
 
@@ -63,6 +71,7 @@ public:
     bool crossDeviceEnabled() const { return m_crossDevice.isEnabled; }
     bool notificationsEnabled() const { return m_notificationsEnabled; }
     int retryAttempts() const { return m_retryAttempts; }
+    int autoConnectBehavior() const { return m_autoConnectBehavior; }
 
     // ── Initialization (call after construction) ────────────────────
     void initialize();
@@ -79,6 +88,7 @@ public slots:
     void setCrossDeviceEnabled(bool enabled);
     void setNotificationsEnabled(bool enabled);
     void setRetryAttempts(int attempts);
+    void setAutoConnectBehavior(int behavior);
     void renameDevice(const QString &newName);
     void setPhoneMac(const QString &mac);
     void requestMagicCloudKeys();
@@ -94,6 +104,7 @@ signals:
     void crossDeviceEnabledChanged(bool enabled);
     void notificationsEnabledChanged(bool enabled);
     void retryAttemptsChanged(int attempts);
+    void autoConnectBehaviorChanged(int behavior);
     void phoneMacStatusChanged(const QString &status);
 
     // Forwarded from sub-models for convenience
@@ -132,6 +143,9 @@ private:
     // ── Internal disconnect handling ────────────────────────────────
     void handleDeviceDisconnected(const QBluetoothAddress &address);
 
+    // ── Auto-connect on wear ────────────────────────────────────────
+    void maybeAutoConnect(const BleInfo &device);
+
     // ── Settings persistence ────────────────────────────────────────
     bool loadCrossDeviceEnabled();
     void saveCrossDeviceEnabled();
@@ -141,6 +155,8 @@ private:
     void saveNotificationsEnabled(bool enabled);
     int loadRetryAttempts() const;
     void saveRetryAttempts(int attempts);
+    int loadAutoConnectBehavior() const;
+    void saveAutoConnectBehavior() const;
 
     // ── Members ─────────────────────────────────────────────────────
     bool m_debugMode;
@@ -169,6 +185,11 @@ private:
     bool m_notificationsEnabled = true;
     int m_retryAttempts = 3;
     int m_retryCount = 0;
+
+    // Auto-connect-on-wear
+    int m_autoConnectBehavior = WhenWorn;
+    AutoConnect::Engine m_autoConnect;
+    QElapsedTimer m_monotonic;   // engine clock (monotonic ms)
 
     // Cross-device relay buffers
     QByteArray m_lastBatteryStatus;

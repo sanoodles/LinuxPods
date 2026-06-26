@@ -46,6 +46,8 @@
     <property name="AutoStartEnabled" type="b" access="read"/>
     <property name="RetryAttempts" type="i" access="read"/>
     <property name="CrossDeviceEnabled" type="b" access="read"/>
+    <!-- Auto-connect on wear: 0=Off, 1=When worn, 2=When worn & playing -->
+    <property name="AutoConnectBehavior" type="i" access="read"/>
 
     <!-- Magic Cloud Keys (hex strings) -->
     <property name="MagicAccIRK" type="s" access="read"/>
@@ -81,6 +83,9 @@
     </method>
     <method name="SetCrossDeviceEnabled">
       <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="SetAutoConnectBehavior">
+      <arg name="behavior" type="i" direction="in"/>
     </method>
     <method name="RenameDevice">
       <arg name="name" type="s" direction="in"/>

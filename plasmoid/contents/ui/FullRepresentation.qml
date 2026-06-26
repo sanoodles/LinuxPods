@@ -228,6 +228,20 @@ ColumnLayout {
                 }
 
                 Kirigami.Separator { Layout.fillWidth: true }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    PC3.Label { Layout.fillWidth: true; text: i18n("Auto-connect when worn") }
+                    PC3.ComboBox {
+                        model: [i18n("Off"), i18n("When worn"), i18n("When worn & playing")]
+                        currentIndex: fullRep.b ? fullRep.b.autoConnect : 1
+                        onActivated: (i) => { if (fullRep.b) fullRep.b.setAutoConn(i) }
+                    }
+                }
+
+                Kirigami.Separator { Layout.fillWidth: true }
                 FeatureRow { text: i18n("Notifications"); checked: fullRep.b ? fullRep.b.notifications : false; onToggled: { if (fullRep.b) fullRep.b.setNotif(checked) } }
                 Kirigami.Separator { Layout.fillWidth: true }
                 FeatureRow { text: i18n("Auto-start"); checked: fullRep.b ? fullRep.b.autoStart : false; onToggled: { if (fullRep.b) fullRep.b.setAutoSt(checked) } }

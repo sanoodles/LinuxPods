@@ -59,6 +59,7 @@ class LinuxPodsDBusAdaptor : public QDBusAbstractAdaptor
     Q_PROPERTY(bool AutoStartEnabled READ autoStartEnabled)
     Q_PROPERTY(int RetryAttempts READ retryAttempts)
     Q_PROPERTY(bool CrossDeviceEnabled READ crossDeviceEnabled)
+    Q_PROPERTY(int AutoConnectBehavior READ autoConnectBehavior)
 
     // ── Magic Cloud Keys ────────────────────────────────────────────
     Q_PROPERTY(QString MagicAccIRK READ magicAccIRK)
@@ -82,6 +83,7 @@ public:
         connect(m_service, &LinuxPodsService::earDetectionBehaviorChanged, this, emitAll);
         connect(m_service, &LinuxPodsService::notificationsEnabledChanged, this, emitAll);
         connect(m_service, &LinuxPodsService::retryAttemptsChanged, this, emitAll);
+        connect(m_service, &LinuxPodsService::autoConnectBehaviorChanged, this, emitAll);
         connect(m_service, &LinuxPodsService::crossDeviceEnabledChanged, this, emitAll);
 
         // Forward DeviceInfo sub-signals
@@ -155,6 +157,7 @@ public:
     bool autoStartEnabled() const { return m_service->autoStartManager()->autoStartEnabled(); }
     int retryAttempts() const { return m_service->retryAttempts(); }
     bool crossDeviceEnabled() const { return m_service->crossDeviceEnabled(); }
+    int autoConnectBehavior() const { return m_service->autoConnectBehavior(); }
 
     QString magicAccIRK() const { return m_service->deviceInfo()->magicAccIRKHex(); }
     QString magicAccEncKey() const { return m_service->deviceInfo()->magicAccEncKeyHex(); }
@@ -171,6 +174,7 @@ public slots:
     void SetAutoStartEnabled(bool enabled) { m_service->autoStartManager()->setAutoStartEnabled(enabled); }
     void SetRetryAttempts(int attempts) { m_service->setRetryAttempts(attempts); }
     void SetCrossDeviceEnabled(bool enabled) { m_service->setCrossDeviceEnabled(enabled); }
+    void SetAutoConnectBehavior(int behavior) { m_service->setAutoConnectBehavior(behavior); }
     void RenameDevice(const QString &name) { m_service->renameDevice(name); }
     void SetPhoneMac(const QString &mac) { m_service->setPhoneMac(mac); }
     void RequestMagicCloudKeys() { m_service->requestMagicCloudKeys(); }
@@ -212,7 +216,7 @@ private:
             QStringLiteral("OneBudANCMode"),
             QStringLiteral("EarDetectionBehavior"), QStringLiteral("NotificationsEnabled"),
             QStringLiteral("AutoStartEnabled"), QStringLiteral("RetryAttempts"),
-            QStringLiteral("CrossDeviceEnabled"),
+            QStringLiteral("CrossDeviceEnabled"), QStringLiteral("AutoConnectBehavior"),
             QStringLiteral("MagicAccIRK"), QStringLiteral("MagicAccEncKey")
         };
 
